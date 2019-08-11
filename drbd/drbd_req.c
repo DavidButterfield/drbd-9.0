@@ -1813,8 +1813,9 @@ static void drbd_send_and_submit(struct drbd_device *device, struct drbd_request
 
 	if (no_remote == false) {
 		struct drbd_plug_cb *plug = drbd_check_plugged(resource);
-		if (plug)
+		if (plug) {
 			drbd_update_plug(plug, req);
+		}
 	}
 
 	/* If it took the fast path in drbd_request_prepare, add it here.
