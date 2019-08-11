@@ -1796,7 +1796,7 @@ static void dcbp_set_start(struct p_compressed_bm *p, int set)
 static void dcbp_set_pad_bits(struct p_compressed_bm *p, int n)
 {
 	BUG_ON(n & ~0x7);
-	p->encoding = (p->encoding & (~0x7 << 4)) | (n << 4);
+	p->encoding = (p->encoding & (~0x7u << 4)) | (n << 4);
 }
 
 static int fill_bitmap_rle_bits(struct drbd_peer_device *peer_device,
@@ -3745,6 +3745,9 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	q->queue_lock = &resource->req_lock; /* needed since we use */
 	/* plugging on a queue, that actually has no requests! */
 	q->unplug_fn = drbd_unplug_fn;
+#elif defined(DRBD_USERMODE)
+	/* decide_on_discard_support() needs this to be initialized */
+	q->queue_lock = &resource->req_lock;
 #endif
 
 	device->md_io.page = alloc_page(GFP_KERNEL);
@@ -3819,6 +3822,12 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	}
 
 	add_disk(disk);
+
+#ifdef DRBD_USERMODE
+	/* UMC keeps too little information to figure this out on its own */
+	UMC_link_disk_to_bdev(disk, device->this_bdev);
+#endif
+
 	device->have_quorum[OLD] =
 	device->have_quorum[NEW] =
 		(resource->res_opts.quorum == QOU_OFF);

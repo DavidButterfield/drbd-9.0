@@ -1,0 +1,133 @@
+# XXX HACKUP XXXXXX
+MY_CFLAGS += -DDEBUG
+# MY_CFLAGS += -fsanitize=undefined
+MY_CFLAGS += -O0
+MY_CFLAGS += -g -ggdb -fno-omit-frame-pointer -fPIC
+
+ifndef MY_SRC
+MY_SRC = $(CURDIR)/../..
+endif
+
+ifndef SYS_SERVICE_INCL
+export SYS_SERVICE_INCL = $(shell if [ -d $(MY_SRC)/MTE/include ]; \
+                                  then echo $(MY_SRC)/MTE/include; \
+                                  fi)
+endif
+
+ifndef USERMODE_LIB_SRC
+USERMODE_LIB_SRC = $(MY_SRC)/usermode_compat/src
+endif
+
+ifndef SCST_SRC
+SCST_SRC = $(MY_SRC)/SCST-Usermode-Adaptation
+endif
+
+ifndef TCMUR_SRC
+export TCMUR_SRC = $(MY_SRC)/tcmu-runner
+endif
+
+
+DRBD_CFLAGS += -DDRBD_USERMODE -I$(USERMODE_LIB_SRC) -I$(SYS_SERVICE_INCL)
+DRBD_CFLAGS += -I$(USERMODE_LIB_SRC)/arch/x86/include -I$(USERMODE_LIB_SRC)/include
+DRBD_CFLAGS += -I$(TCMUR_SRC) -I$(TCMUR_SRC)/ccan -I$(TCMUR_SRC)/libtcmur
+DRBD_CFLAGS += -include $(SCST_SRC)/usermode/drbd_compat.h
+DRBD_CFLAGS += $(MY_CFLAGS)
+
+GITHEAD := ABC	#XXX?
+GITDIFF := XYZ	#XXX?
+
+OBJS =	drbd_actlog.o drbd_bitmap.o drbd_main.o drbd_nl.o \
+	drbd_receiver.o drbd_req.o drbd_sender.o drbd_state.o
+
+OBJS2 =	drbd_buildtag.o drbd_interval.o drbd_nla.o drbd_proc.o \
+	drbd_strings.o drbd_transport.o lru_cache.o
+
+OBJS_COMPAT += drbd-kernel-compat/nsecs_to_jiffies.o 
+OBJS_COMPAT += drbd-kernel-compat/blkdev_issue_zeroout.o
+OBJS_COMPAT += drbd-kernel-compat/drbd_wrappers.o
+# OBJS_COMPAT += drbd-kernel-compat/idr.o
+
+OBJS_NO = drbd_debugfs.o kref_debug.o drbd_kref_debug.o
+
+%.o: %.c 
+	@# Note: for config.h, the -I. must come before -I./drbd-headers
+	$(CC) -c -o $(@) -I. -I./drbd-headers -Idrbd-kernel-compat $(CFLAGS) $(DRBD_CFLAGS) $(EXTRA_CFLAGS) $(<)
+
+%.c: patch
+
+.PHONY: all clean extraclean patch unpatch
+
+all:	patch
+	$(MAKE) -f Makefile.usermode drbd.o
+
+drbd.o:	$(OBJS) $(OBJS2) $(OBJS_COMPAT) drbd_transport_tcp.o
+	ld -r $(OBJS) $(OBJS2) $(OBJS_COMPAT) drbd_transport_tcp.o -o $(@)
+
+patch:	.compat_patches_applied
+
+unpatch:
+	@if test -e .compat_patches_applied; then \
+	    echo "Removing compat patches"; \
+	    patch -R -p0 --batch < .compat_patches_applied; \
+	    rm -f .compat_patches_applied; \
+	fi
+
+clean:
+	rm -f *.[oas] .*.d .depend
+	rm -f drbd-kernel-compat/*.[oas]
+	rm -rf drbd-kernel-compat/cocci_cache
+
+extraclean: clean unpatch
+
+##### Copied from drbd/Kbuild #####
+
+SHELL=/bin/bash
+
+.PHONY: .drbd_git_revision
+.drbd_git_revision:
+	@echo GIT-hash: $(GITHEAD)$(GITDIFF) > $@
+
+.compat_patches_applied: drbd-kernel-compat/compat.patch
+	test ! -e .compat_patches_applied || $(MAKE) -f Makefile.usermode unpatch
+	@echo '  PATCH'
+	patch -d . -p0 --batch --forward < drbd-kernel-compat/compat.patch
+	cp drbd-kernel-compat/compat.patch .compat_patches_applied
+
+dir := drbd-kernel-compat/cocci_cache/UMC
+
+drbd-kernel-compat/compat.patch: compat_UMC.h
+	cp compat_UMC.h compat.h
+	mkdir -p $(dir)
+	test -e $(dir)/compat.h || cp compat_UMC.h $(dir)/compat.h
+	echo "UMC_Usermode" > $(dir)/kernelrelease.txt
+	PATCHLEVEL="" $(MAKE) $(dir)/compat.patch
+	ln -f -s cocci_cache/UMC/compat.patch drbd-kernel-compat/compat.patch
+
+drbd_buildtag.c: $(addprefix $(obj)/,$(filter-out drbd_buildtag.o,$(drbd-y)))
+	@$(echo) '  GEN     $@ $(echo-why)'					\
+	@set -e; exec > $@.new;							\
+	echo -e "/* automatically generated. DO NOT EDIT. */";			\
+	echo -e "#include <linux/drbd.h>";					\
+	echo -e "#include <linux/drbd_config.h>";				\
+	echo -e "const char *drbd_buildtag(void)\n{";				\
+	if test -e $(src)/../.git &&						\
+	   GITHEAD=$$(cd $(src) && git rev-parse HEAD); then			\
+		GITDIFF=$$(cd $(src)/.. && git diff --name-only HEAD |		\
+			tr -s '\t\n' '  ' |					\
+			sed -e 's/^/ /;s/ *$$//');				\
+		echo -e "\treturn \"GIT-hash: $$GITHEAD$$GITDIFF\"";		\
+	elif test -e $(src)/.drbd_git_revision ; then				\
+		echo -e "\treturn \"$$(cat $(src)/.drbd_git_revision)\"";	\
+	elif test -e $@ ; then							\
+		grep return $@ ;						\
+	else									\
+		echo >&2 "Your DRBD source tree is broken. Unpack again.";      \
+		exit 1;								\
+	fi ;									\
+	if [ -z "${WANT_DRBD_REPRODUCIBLE_BUILD}" ] || [ -z "${SOURCE_DATE_EPOCH}" ] ; then	\
+		buildinfo="build by $$USER@$$HOSTNAME, `date "+%F %T"`" ;			\
+	else 											\
+		buildinfo="reproducible build, `date -u -d@${SOURCE_DATE_EPOCH} "+%F %T"`" ; 	\
+	fi ; 											\
+	echo -e "\t\t\" $$buildinfo\";\n}";							\
+	mv -f $@.new $@

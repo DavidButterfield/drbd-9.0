@@ -4185,6 +4185,18 @@ change_cluster_wide_state(bool (*change)(struct change_context *, enum change_ph
 				    &request, reach_immediately);
 	have_peers = rv == SS_CW_SUCCESS;
 	if (have_peers) {
+		// We are here as the change_state macro from inside the condition of
+		//	    wait_event_interruptible((resource)->state_wait,
+		//		    (rv = (change_state)) != SS_IN_TRANSIENT_STATE);
+		//
+		//XXX Is it really kosher to now use that same resource->state_wait
+		//    in another wait_event while we are nested within the first one?
+		//
+		// In drbd_set_role():
+		//	rv = stable_state_change(resource,
+		//		change_role(resource, role, flags, with_force, &err_str));
+		// where change_role() calls this function.
+		//
 		if (wait_event_timeout(resource->state_wait,
 				       cluster_wide_reply_ready(resource),
 				       twopc_timeout(resource)))

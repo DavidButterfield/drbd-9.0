@@ -163,6 +163,12 @@ static int drbd_msg_sprintf_info(struct sk_buff *skb, const char *fmt, ...)
 
 	/* maybe: retry with larger reserve, if truncated */
 	txt->nla_len = nla_attr_size(len+1);
+
+	/* avoid transmitting uninitialized bytes */
+	++len;
+	while (len < NLA_ALIGN(len))
+		*((char *)nla_data(txt) + len++) = '\0';
+
 	nlmsg_trim(skb, (char*)txt + NLA_ALIGN(txt->nla_len));
 	nla_nest_end(skb, nla);
 
@@ -601,6 +607,13 @@ static int drbd_khelper(struct drbd_device *device, struct drbd_connection *conn
 	env_print(&env, "HOME=/");
 	env_print(&env, "TERM=linux");
 	env_print(&env, "PATH=/sbin:/usr/sbin:/bin:/usr/bin");
+#ifdef DRBD_USERMODE
+	{
+	    char * umc_fs_root = getenv("UMC_FS_ROOT");
+	    if (umc_fs_root)
+		env_print(&env, "UMC_FS_ROOT=%s", umc_fs_root);
+	}
+#endif
 	if (device) {
 		env_print(&env, "DRBD_MINOR=%u", device_to_minor(device));
 		env_print(&env, "DRBD_VOLUME=%u", device->vnr);
