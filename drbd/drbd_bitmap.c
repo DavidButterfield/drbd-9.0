@@ -962,8 +962,9 @@ int drbd_bm_resize(struct drbd_device *device, sector_t capacity, bool set_new_b
 	}
 
 	spin_unlock_irq(&b->bm_lock);
-	if (opages != npages)
+	if (opages != npages) {
 		kvfree(opages);
+	}
 	if (!growing)
 		bm_count_bits(device);
 	drbd_info(device, "resync bitmap: bits=%lu words=%lu pages=%lu\n", bits, words, want);
