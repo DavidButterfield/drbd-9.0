@@ -1,3 +1,11 @@
+# DRBD Running in usermode
+
+**This "usermode" branch of the drbd-9.0 repository has changes to allow running in usermode**
+
+To work with it, you need to checkout the *drbd* branches of my MTE and usermode__compat repositories.
+
+For more information on how to build, see SCST-Usermode-Adaptation repository usermode/README.DRBD
+
 # DRBD9
 
 This repository contains the Linux kernel code for DRBD9.

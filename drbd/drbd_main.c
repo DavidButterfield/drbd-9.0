@@ -3699,6 +3699,11 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	blk_queue_make_request(q, drbd_make_request);
 	blk_queue_write_cache(q, true, true);
 
+#if defined(DRBD_USERMODE)
+        /* decide_on_discard_support() needs this to be initialized */
+        q->queue_lock = &resource->req_lock;
+#endif
+
 	device->md_io.page = alloc_page(GFP_KERNEL);
 	if (!device->md_io.page)
 		goto out_no_io_page;
@@ -3771,6 +3776,12 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	}
 
 	add_disk(disk);
+
+#ifdef DRBD_USERMODE
+	/* UMC keeps too little information to figure this out on its own */
+	UMC_link_disk_to_bdev(disk, device->this_bdev);
+#endif
+
 	device->have_quorum[OLD] =
 	device->have_quorum[NEW] =
 		(resource->res_opts.quorum == QOU_OFF);

@@ -600,6 +600,13 @@ static int drbd_khelper(struct drbd_device *device, struct drbd_connection *conn
 	env_print(&env, "HOME=/");
 	env_print(&env, "TERM=linux");
 	env_print(&env, "PATH=/sbin:/usr/sbin:/bin:/usr/bin");
+#ifdef DRBD_USERMODE
+	{
+	    char * umc_fs_root = getenv("UMC_FS_ROOT");
+	    if (umc_fs_root)
+		env_print(&env, "UMC_FS_ROOT=%s", umc_fs_root);
+	}
+#endif
 	if (device) {
 		env_print(&env, "DRBD_MINOR=%u", device_to_minor(device));
 		env_print(&env, "DRBD_VOLUME=%u", device->vnr);

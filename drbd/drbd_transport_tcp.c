@@ -629,7 +629,14 @@ retry:
 		spin_unlock_bh(&listener->listener.waiters_lock);
 
 		s_estab = NULL;
+#ifndef DRBD_USERMODE
 		err = kernel_accept(listener->s_listen, &s_estab, O_NONBLOCK);
+#else
+		//XXX O_NONBLOCK seems inappropriate for the new socket.
+		//XXX Also, in usermode it causes errors establishing the peer connection.
+		err = kernel_accept(listener->s_listen, &s_estab, 0);
+#endif
+
 		if (err < 0)
 			return err;
 
